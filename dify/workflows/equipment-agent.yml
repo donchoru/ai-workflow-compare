@@ -1,0 +1,400 @@
+# Dify DSL — 물류 장비 부하율 관리 워크플로우
+# Dify 0.8+ 에서 "Import DSL" 기능으로 불러오기
+#
+# 아키텍처:
+#   Start → Question Classifier → [6가지 의도별 HTTP Request] → LLM (응답생성) → End
+#
+# 사전 설정 필요:
+#   1. Gemini 모델 플러그인 설치 + API Key 설정
+#   2. tool_server 실행 (localhost:8400)
+
+app:
+  name: 물류 장비 부하율 관리 어시스턴트
+  description: 물류 장비의 상태, 부하율, 알림, Lot 정보를 조회하는 AI 어시스턴트
+  mode: advanced-chat
+  icon: "🏭"
+
+# ─── 워크플로우 노드 정의 ───────────────────────────────────
+
+workflow:
+  nodes:
+    # ── 1. 시작 노드 ──────────────────────────────────
+    - id: start
+      type: start
+      title: 시작
+      position:
+        x: 80
+        y: 300
+
+    # ── 2. 의도분류 (Question Classifier) ─────────────
+    - id: question_classifier
+      type: question-classifier
+      title: 의도분류
+      position:
+        x: 320
+        y: 300
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        query: "{{#start.query#}}"
+        classes:
+          - id: equipment_status
+            name: 장비 상태 조회
+            description: "장비 상태 (RUNNING/IDLE/MAINTENANCE/ERROR) 조회. 예: 'L2 장비 상태', '컨베이어 상태'"
+          - id: load_rate_query
+            name: 부하율 조회
+            description: "부하율 수치 조회. 예: 'L1 컨베이어 부하율', '부하율 알려줘'"
+          - id: alert_check
+            name: 알림 이력
+            description: "알림/경고 이력 조회. 예: '최근 알림', 'CRITICAL 알림'"
+          - id: overload_check
+            name: 과부하 확인
+            description: "과부하 장비 확인. 예: '과부하 장비 있어?', '임계값 초과'"
+          - id: lot_query
+            name: Lot 조회
+            description: "Lot(생산단위) 조회. 예: '설비 Lot', 'LOT-005 어디야?'"
+          - id: general_chat
+            name: 일반 대화
+            description: "물류와 무관한 일반 대화. 예: '안녕', '날씨 어때?'"
+
+    # ── 3a. 장비 상태 조회 ────────────────────────────
+    - id: http_equipment_status
+      type: http-request
+      title: 장비 상태 API
+      position:
+        x: 640
+        y: 80
+      data:
+        method: GET
+        url: "http://host.docker.internal:8400/tools/equipment/status"
+        headers: []
+        params: []
+        timeout: 30
+
+    # ── 3b. 부하율 조회 ──────────────────────────────
+    - id: http_load_rates
+      type: http-request
+      title: 부하율 API
+      position:
+        x: 640
+        y: 200
+      data:
+        method: GET
+        url: "http://host.docker.internal:8400/tools/equipment/load-rates"
+        headers: []
+        params: []
+        timeout: 30
+
+    # ── 3c. 알림 이력 조회 ────────────────────────────
+    - id: http_alerts
+      type: http-request
+      title: 알림 API
+      position:
+        x: 640
+        y: 320
+      data:
+        method: GET
+        url: "http://host.docker.internal:8400/tools/alerts/recent"
+        headers: []
+        params: []
+        timeout: 30
+
+    # ── 3d. 과부하 장비 조회 ──────────────────────────
+    - id: http_overloaded
+      type: http-request
+      title: 과부하 API
+      position:
+        x: 640
+        y: 440
+      data:
+        method: GET
+        url: "http://host.docker.internal:8400/tools/equipment/overloaded"
+        headers: []
+        params: []
+        timeout: 30
+
+    # ── 3e. Lot 조회 (구간별 요약 + 과부하 장비 활용) ─
+    - id: http_zones
+      type: http-request
+      title: 구간/Lot API
+      position:
+        x: 640
+        y: 560
+      data:
+        method: GET
+        url: "http://host.docker.internal:8400/tools/zones/summary"
+        headers: []
+        params: []
+        timeout: 30
+
+    # ── 4a~e. 응답 생성 LLM ──────────────────────────
+    - id: llm_response_status
+      type: llm
+      title: 응답 생성 (장비상태)
+      position:
+        x: 960
+        y: 80
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: |
+              당신은 물류 장비 관리 어시스턴트입니다.
+              API 조회 결과를 바탕으로 사용자에게 이해하기 쉬운 한국어 응답을 생성하세요.
+              표 형식을 사용하고, 이상 수치는 강조하세요.
+          - role: user
+            text: |
+              사용자 질문: {{#start.query#}}
+
+              API 조회 결과:
+              {{#http_equipment_status.body#}}
+
+              위 데이터를 바탕으로 질문에 답해주세요.
+
+    - id: llm_response_load
+      type: llm
+      title: 응답 생성 (부하율)
+      position:
+        x: 960
+        y: 200
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: |
+              당신은 물류 장비 관리 어시스턴트입니다.
+              부하율 데이터를 분석하여 사용자에게 보고하세요.
+              수치는 소수점 1자리, 임계값 이상은 경고 표시하세요.
+          - role: user
+            text: |
+              사용자 질문: {{#start.query#}}
+
+              부하율 데이터:
+              {{#http_load_rates.body#}}
+
+    - id: llm_response_alerts
+      type: llm
+      title: 응답 생성 (알림)
+      position:
+        x: 960
+        y: 320
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: |
+              당신은 물류 장비 관리 어시스턴트입니다.
+              알림 이력을 분석하여 보고하세요.
+          - role: user
+            text: |
+              사용자 질문: {{#start.query#}}
+
+              알림 이력:
+              {{#http_alerts.body#}}
+
+    - id: llm_response_overload
+      type: llm
+      title: 응답 생성 (과부하)
+      position:
+        x: 960
+        y: 440
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: |
+              당신은 물류 장비 관리 어시스턴트입니다.
+              과부하 장비를 분석하여 긴급도 순으로 보고하세요.
+              CRITICAL > WARNING 순으로 표시.
+          - role: user
+            text: |
+              사용자 질문: {{#start.query#}}
+
+              과부하 장비:
+              {{#http_overloaded.body#}}
+
+    - id: llm_response_lot
+      type: llm
+      title: 응답 생성 (Lot)
+      position:
+        x: 960
+        y: 560
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: |
+              당신은 물류 장비 관리 어시스턴트입니다.
+              Lot 및 구간 정보를 분석하여 답하세요.
+          - role: user
+            text: |
+              사용자 질문: {{#start.query#}}
+
+              구간별 요약:
+              {{#http_zones.body#}}
+
+    - id: llm_general
+      type: llm
+      title: 일반 대화
+      position:
+        x: 960
+        y: 680
+      data:
+        model:
+          provider: google
+          name: gemini-2.0-flash
+          mode: chat
+        prompt_template:
+          - role: system
+            text: "당신은 친절한 물류 장비 관리 어시스턴트입니다. 물류와 무관한 질문에는 간단히 답하고, 물류 관련 질문을 유도하세요."
+          - role: user
+            text: "{{#start.query#}}"
+
+    # ── 5. 종료 노드들 ───────────────────────────────
+    - id: end_status
+      type: end
+      title: 응답 출력 (장비상태)
+      position:
+        x: 1280
+        y: 80
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_response_status.text#}}"
+
+    - id: end_load
+      type: end
+      title: 응답 출력 (부하율)
+      position:
+        x: 1280
+        y: 200
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_response_load.text#}}"
+
+    - id: end_alerts
+      type: end
+      title: 응답 출력 (알림)
+      position:
+        x: 1280
+        y: 320
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_response_alerts.text#}}"
+
+    - id: end_overload
+      type: end
+      title: 응답 출력 (과부하)
+      position:
+        x: 1280
+        y: 440
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_response_overload.text#}}"
+
+    - id: end_lot
+      type: end
+      title: 응답 출력 (Lot)
+      position:
+        x: 1280
+        y: 560
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_response_lot.text#}}"
+
+    - id: end_general
+      type: end
+      title: 응답 출력 (일반)
+      position:
+        x: 1280
+        y: 680
+      data:
+        outputs:
+          - variable: result
+            value: "{{#llm_general.text#}}"
+
+  # ─── 엣지 정의 ──────────────────────────────────────
+  edges:
+    - source: start
+      target: question_classifier
+
+    # Question Classifier → 의도별 HTTP 또는 LLM
+    - source: question_classifier
+      sourceHandle: equipment_status
+      target: http_equipment_status
+
+    - source: question_classifier
+      sourceHandle: load_rate_query
+      target: http_load_rates
+
+    - source: question_classifier
+      sourceHandle: alert_check
+      target: http_alerts
+
+    - source: question_classifier
+      sourceHandle: overload_check
+      target: http_overloaded
+
+    - source: question_classifier
+      sourceHandle: lot_query
+      target: http_zones
+
+    - source: question_classifier
+      sourceHandle: general_chat
+      target: llm_general
+
+    # HTTP → LLM 응답 생성
+    - source: http_equipment_status
+      target: llm_response_status
+
+    - source: http_load_rates
+      target: llm_response_load
+
+    - source: http_alerts
+      target: llm_response_alerts
+
+    - source: http_overloaded
+      target: llm_response_overload
+
+    - source: http_zones
+      target: llm_response_lot
+
+    # LLM → End
+    - source: llm_response_status
+      target: end_status
+
+    - source: llm_response_load
+      target: end_load
+
+    - source: llm_response_alerts
+      target: end_alerts
+
+    - source: llm_response_overload
+      target: end_overload
+
+    - source: llm_response_lot
+      target: end_lot
+
+    - source: llm_general
+      target: end_general

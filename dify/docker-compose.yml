@@ -1,0 +1,54 @@
+# Dify 셀프호스트 참조용 docker-compose
+# 실제 최신 설정: https://docs.dify.ai/getting-started/install-self-hosted/docker-compose
+#
+# 사용법:
+#   docker compose up -d
+#   브라우저: http://localhost
+#
+# 주의: 이 파일은 참조용이며, 실제 Dify 배포에는 공식 docker-compose를 사용하세요.
+# Dify는 복잡한 마이크로서비스 구조 (api, worker, web, db, redis, sandbox 등)입니다.
+
+services:
+  # Dify 공식 Docker 이미지 (올인원은 없음 - 공식 repo 참고)
+  # git clone https://github.com/langgenius/dify.git
+  # cd dify/docker
+  # cp .env.example .env
+  # docker compose up -d
+
+  # ── 참조: 최소 구성 ──
+  # dify-api:
+  #   image: langgenius/dify-api:latest
+  #   ports:
+  #     - "5001:5001"
+  #   environment:
+  #     - SECRET_KEY=your-secret-key
+  #     - DB_USERNAME=postgres
+  #     - DB_PASSWORD=difyai123456
+  #     - REDIS_HOST=redis
+  #   depends_on:
+  #     - db
+  #     - redis
+  #
+  # dify-web:
+  #   image: langgenius/dify-web:latest
+  #   ports:
+  #     - "3000:3000"
+  #
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_PASSWORD: difyai123456
+  #     POSTGRES_DB: dify
+  #
+  # redis:
+  #   image: redis:7-alpine
+
+  # ── Tool Server (이 프로젝트) ──
+  tool-server:
+    build:
+      context: ../
+      dockerfile: shared/tool_server/Dockerfile
+    ports:
+      - "8400:8400"
+    volumes:
+      - ../logistics.db:/app/logistics.db

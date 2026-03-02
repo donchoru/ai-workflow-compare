@@ -1,0 +1,278 @@
+openapi: "3.0.3"
+info:
+  title: 물류 장비 부하율 관리 API
+  description: 물류 장비 상태, 부하율, 알림, Lot 정보를 조회하는 도구 API
+  version: "1.0.0"
+servers:
+  - url: http://host.docker.internal:8400
+    description: Tool Server (Docker 내부에서 호스트 접근)
+  - url: http://localhost:8400
+    description: Tool Server (로컬)
+
+paths:
+  /tools/equipment/list:
+    get:
+      operationId: getEquipmentList
+      summary: 장비 목록 조회
+      description: 장비 목록을 조회합니다. 유형, 라인, 구간으로 필터링 가능.
+      parameters:
+        - name: equipment_type
+          in: query
+          schema:
+            type: string
+            enum: [CONVEYOR, AGV, CRANE, SORTER, STACKER, SHUTTLE]
+          description: 장비 유형
+        - name: line
+          in: query
+          schema:
+            type: string
+            enum: [L1, L2, L3]
+          description: 라인
+        - name: zone
+          in: query
+          schema:
+            type: string
+            enum: [TFT, CELL, MODULE, PACK]
+          description: 구간
+      responses:
+        "200":
+          description: 장비 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Equipment"
+
+  /tools/equipment/status:
+    get:
+      operationId: getEquipmentStatus
+      summary: 장비 상태 현황
+      description: 상태별 장비 집계 + 목록
+      parameters:
+        - name: equipment_type
+          in: query
+          schema:
+            type: string
+        - name: line
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 장비 상태 현황
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: array
+                    items:
+                      type: object
+                  equipment:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Equipment"
+
+  /tools/equipment/load-rates:
+    get:
+      operationId: getLoadRates
+      summary: 부하율 조회
+      description: 최근 N시간 부하율 데이터 조회
+      parameters:
+        - name: equipment_type
+          in: query
+          schema:
+            type: string
+        - name: line
+          in: query
+          schema:
+            type: string
+        - name: zone
+          in: query
+          schema:
+            type: string
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 최근 N시간
+      responses:
+        "200":
+          description: 부하율 데이터
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/equipment/overloaded:
+    get:
+      operationId: getOverloadedEquipment
+      summary: 과부하 장비 조회
+      description: 최근 1시간 내 과부하 장비
+      parameters:
+        - name: threshold_pct
+          in: query
+          schema:
+            type: number
+          description: 임계값 (0이면 장비 유형별 기본값)
+      responses:
+        "200":
+          description: 과부하 장비 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/equipment/{equipment_id}/detail:
+    get:
+      operationId: getEquipmentDetail
+      summary: 장비 상세 정보
+      description: 특정 장비 상세 + 최근 부하율 24건 + 알림 10건
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 장비 ID (예 CVR-L1-TFT-01)
+      responses:
+        "200":
+          description: 장비 상세
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tools/alerts/recent:
+    get:
+      operationId: getRecentAlerts
+      summary: 최근 알림 이력
+      description: 최근 N시간 알림 이력 조회
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 24
+        - name: alert_type
+          in: query
+          schema:
+            type: string
+            enum: [WARNING, CRITICAL]
+      responses:
+        "200":
+          description: 알림 이력
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/zones/summary:
+    get:
+      operationId: getZoneSummary
+      summary: 구간별 부하율 요약
+      description: 구간별 최근 1시간 평균/최대/최소 부하율
+      parameters:
+        - name: line
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 구간별 요약
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/lots/on-equipment/{equipment_id}:
+    get:
+      operationId: getLotsOnEquipment
+      summary: 설비의 현재 Lot
+      description: 설비에 현재 물리적으로 위치한 Lot 조회
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 현재 Lot 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/lots/scheduled/{equipment_id}:
+    get:
+      operationId: getLotsScheduled
+      summary: 설비의 예정 Lot
+      description: 설비에 예정된 Lot 조회
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 예정 Lot 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /tools/lots/{lot_id}/detail:
+    get:
+      operationId: getLotDetail
+      summary: Lot 상세 정보
+      description: 특정 Lot 상세 + 스케줄 이력
+      parameters:
+        - name: lot_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lot 상세
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  schemas:
+    Equipment:
+      type: object
+      properties:
+        equipment_id:
+          type: string
+        equipment_type:
+          type: string
+        line:
+          type: string
+        zone:
+          type: string
+        status:
+          type: string
+        installed_date:
+          type: string
+        description:
+          type: string
