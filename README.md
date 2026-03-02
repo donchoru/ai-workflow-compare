@@ -372,8 +372,10 @@ Tool Server 기동 후 **Swagger UI**: http://localhost:8400/docs
 | 문서 | 내용 |
 |------|------|
 | [docs/architecture-decision.md](docs/architecture-decision.md) | **아키텍처 결정 기록 (ADR)** — 왜 Open WebUI + LangGraph인가 |
+| [docs/tutorial.md](docs/tutorial.md) | **교육용 튜토리얼** — 학습 경로, 용어 사전, 코드 스니펫, 트레이스 읽는 법 |
 | [docs/comparison.md](docs/comparison.md) | LangGraph vs Dify 상세 비교 (7개 관점) |
 | [docs/examples.md](docs/examples.md) | 동일 질문 3개에 대한 각 구현별 응답 비교 |
+| [docs/traces/](docs/traces/) | FM I/O 트레이스 실물 (에이전트 실행 과정 기록) |
 | [dify/README.md](dify/README.md) | Dify 설정 가이드 |
 | [open-webui/README.md](open-webui/README.md) | Open WebUI 설정 가이드 |
 
