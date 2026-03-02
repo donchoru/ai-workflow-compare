@@ -12,7 +12,8 @@
 3. [동일 질문 처리 과정 비교](#3-동일-질문-처리-과정-비교)
 4. [핵심 코드 스니펫](#4-핵심-코드-스니펫)
 5. [FM I/O 트레이스 읽는 법](#5-fm-io-트레이스-읽는-법)
-6. [자주 묻는 질문 (FAQ)](#6-자주-묻는-질문)
+6. [Open WebUI Tool 직접 연결 vs LangGraph 백엔드](#6-open-webui-tool-직접-연결-vs-langgraph-백엔드)
+7. [자주 묻는 질문 (FAQ)](#7-자주-묻는-질문)
 
 ---
 
@@ -584,9 +585,195 @@ traces/
 
 ---
 
-## 6. 자주 묻는 질문
+## 6. Open WebUI Tool 직접 연결 vs LangGraph 백엔드
 
-### Q1. LangGraph가 Dify보다 항상 좋은가요?
+> Open WebUI에 Tool을 직접 등록하는 것과, LangGraph를 백엔드로 쓰는 것은 **완전히 다른 아키텍처**입니다.
+> 같은 결과처럼 보여도, 내부 동작과 확장성이 크게 다릅니다.
+
+### 두 가지 방식 한눈에 비교
+
+#### 방식 A: Open WebUI에 Tool 직접 연결
+
+```
+┌─ Open WebUI ─────────────────────────────────────┐
+│                                                   │
+│  사용자: "과부하 장비 있어?"                      │
+│           ↓                                       │
+│  Open WebUI 내장 LLM이 직접 판단                 │
+│  "이 Tool을 호출해야겠다"                         │
+│           ↓                                       │
+│  Tool: get_overloaded() → DB 결과                │
+│           ↓                                       │
+│  LLM이 결과 보고 응답 생성                       │
+│                                                   │
+│  ※ 모든 것이 Open WebUI 안에서 일어남            │
+└───────────────────────────────────────────────────┘
+```
+
+- Open WebUI가 **LLM 호출 + Tool 선택 + 응답 생성** 전부 담당
+- 설정에서 Tool을 등록하면 끝 — 간단하고 빠름
+
+#### 방식 B: Open WebUI + LangGraph 백엔드 (우리 방식)
+
+```
+┌─ Open WebUI ──────┐        ┌─ LangGraph ──────────────────────┐
+│                    │        │                                   │
+│  사용자 질문       │ ─────► │  IntentAgent (의도분류)           │
+│                    │  API   │       ↓                           │
+│  나는 그냥         │  호출   │  InfoAgent (도구 자율 선택)       │
+│  채팅 UI일 뿐      │        │       ↓                           │
+│                    │        │  ToolNode (SQL 실행)              │
+│                    │        │       ↓                           │
+│  응답 표시         │ ◄───── │  ResponseAgent (응답 생성)        │
+│                    │  응답   │                                   │
+└────────────────────┘        └───────────────────────────────────┘
+```
+
+- Open WebUI는 **채팅 UI만** 담당 (입력 받고, 응답 보여주고)
+- 에이전트 로직은 전부 **LangGraph가 외부에서 처리**
+
+### 상세 비교
+
+| 비교 항목 | Tool 직접 연결 | LangGraph 백엔드 |
+|-----------|---------------|-------------------|
+| **구조** | Open WebUI가 전부 처리 | Open WebUI는 UI만, 로직은 LangGraph |
+| **누가 도구를 고르나** | Open WebUI 내장 LLM | LangGraph의 InfoAgent |
+| **의도분류** | 없음 (LLM이 알아서) | IntentAgent가 **명시적으로** 분류 |
+| **모호한 질문** | Tool **1개만** 호출 | **2개 동시 호출** 가능 |
+| **멀티턴 컨텍스트** | Open WebUI 기본 기능 | 대명사 해소, 이전 의도 참조 직접 구현 |
+| **토큰 관리** | 없음 (Open WebUI 기본) | 3계층 트리밍 (세밀한 제어) |
+| **디버깅** | 로그 거의 없음 | FM I/O 트레이스 **전체 기록** |
+| **LLM 교체** | Open WebUI 설정에서 변경 | `config.py` 1줄 변경 |
+| **커스텀 로직** | 제한적 | 무한 (Python 코드) |
+| **설정 난이도** | 쉬움 (UI에서 Tool 등록) | 중간 (LangGraph 서버 별도 기동) |
+| **코드량** | ~0줄 | ~600줄 |
+
+### 차이가 극명하게 드러나는 예시
+
+#### 예시 1: "과부하 장비 있어?" — 둘 다 잘 됨
+
+```
+Tool 직접 연결:
+  Open WebUI LLM → get_overloaded_equipment() → 결과 → 응답 생성
+  ✅ 잘 동작함 (단순한 1:1 매핑)
+
+LangGraph 백엔드:
+  IntentAgent → InfoAgent → get_overloaded_equipment() → 응답 생성
+  ✅ 잘 동작함 (동일한 결과)
+```
+
+**이런 단순한 질문은 Tool 직접 연결도 충분합니다.**
+
+#### 예시 2: "설비 Lot 알려줘" — 여기서 갈림
+
+```
+Tool 직접 연결:
+  Open WebUI LLM → "음... get_lots 하나 호출할게"
+  → Tool 1개만 호출
+  → 물리적 위치 OR 스케줄 중 하나만 답변
+  ❌ 정보 손실
+
+LangGraph 백엔드:
+  IntentAgent → "lot_query, 모호함 감지"
+  InfoAgent → "모호하니까 2개 다 호출"
+  → get_lots_on_equipment() + get_lots_scheduled_for_equipment()
+  → 📍 현재 Lot + 📅 예정 Lot 둘 다 답변
+  ✅ 완전한 정보 제공
+```
+
+**모호한 질문에서 차이가 납니다.**
+
+#### 예시 3: "아까 그 장비 부하율 어때?" — 멀티턴
+
+```
+Tool 직접 연결:
+  Open WebUI LLM → "그 장비가 뭐지...?"
+  → 대화 이력은 있지만, "그 장비"를 해석하는 로직 없음
+  → 장비 ID 없이 Tool 호출 → 전체 부하율 반환 (원치 않는 결과)
+  ⚠️ 부정확
+
+LangGraph 백엔드:
+  IntentAgent → _build_context()로 이전 대화 분석
+  → "이전 질문에서 CVR-L1-CELL-01 언급"
+  → intent_detail: { equipment_id: "CVR-L1-CELL-01" }
+  → InfoAgent → get_load_rates(equipment_id="CVR-L1-CELL-01")
+  → 정확한 장비의 부하율만 반환
+  ✅ 정확
+```
+
+**대명사 해소("그", "거기", "아까 그 장비")에서 차이가 납니다.**
+
+### 그래서 뭘 써야 하나?
+
+```
+                단순한 Q&A 챗봇               복잡한 업무 챗봇
+                (FAQ, 검색, 조회)             (판단, 분기, 동시 처리)
+                      │                              │
+                      ▼                              ▼
+              Tool 직접 연결                  LangGraph 백엔드
+              ──────────────                  ─────────────────
+              빠르게 구성 가능                 세밀한 제어 가능
+              코드 0줄                        코드 ~600줄
+              충분히 좋은 결과                 최적의 결과
+```
+
+| 이런 상황이면 | 추천 |
+|--------------|------|
+| Tool 5개 이하, 단순 조회 | **Tool 직접 연결** — 빠르고 간편 |
+| "시제품(POC) 빨리 만들어야 해" | **Tool 직접 연결** — 설정만 하면 끝 |
+| Tool 10개+, LLM이 자율 판단해야 한다 | **LangGraph 백엔드** |
+| 모호한 질문 → 2개 동시 호출 필요 | **LangGraph 백엔드** |
+| 멀티턴에서 대명사 해소 필요 | **LangGraph 백엔드** |
+| LLM 교체 예정 (Gemini → watsonx) | **LangGraph 백엔드** |
+| FM I/O 전체 기록 + 디버깅 필요 | **LangGraph 백엔드** |
+
+**비유:**
+- Tool 직접 연결 = **만능 리모컨** — 채널 바꾸기, 볼륨 조절 다 되지만 단순한 동작만
+- LangGraph 백엔드 = **AI 비서** — 상황 파악하고, 필요하면 여러 일을 동시에 처리
+
+---
+
+## 7. 자주 묻는 질문
+
+### Q1. Open WebUI에 LangGraph를 어떻게 연결하나요?
+
+LangGraph 전체 그래프를 **LangServe 또는 FastAPI로 감싸서** OpenAI 호환 API를 만듭니다.
+
+```python
+# serve.py — LangGraph를 API로 노출
+from fastapi import FastAPI, Request
+from graph.workflow import build_graph
+
+app = FastAPI()
+graph = build_graph()
+
+@app.post("/chat/completions")
+async def chat(request: Request):
+    body = await request.json()
+    user_msg = body["messages"][-1]["content"]
+
+    result = graph.invoke({
+        "user_input": user_msg,
+        "messages": [], "intent": "", "intent_detail": "",
+        "final_answer": "", "conversation_history": [], "trace_log": [],
+    })
+
+    return {
+        "choices": [{
+            "message": {"role": "assistant", "content": result["final_answer"]}
+        }]
+    }
+```
+
+그 다음 Open WebUI에서:
+```
+설정 → 연결 → OpenAI API 추가
+  URL: http://localhost:8000
+```
+
+Open WebUI는 **"OpenAI API 형태로 응답하는 서버"** 정도만 알고, 내부에 에이전트가 몇 개인지는 모릅니다.
+
+### Q2. LangGraph가 Dify보다 항상 좋은가요?
 
 **아닙니다.** 용도가 다릅니다.
 
@@ -598,7 +785,19 @@ traces/
 | 빠르게 프로토타입 만들어 데모 | Dify |
 | 단순한 파이프라인 (입력→처리→출력) | Dify |
 
-### Q2. Function Calling이 정확히 뭔가요?
+### Q2. LangGraph가 Dify보다 항상 좋은가요?
+
+**아닙니다.** 용도가 다릅니다.
+
+| 상황 | 추천 |
+|------|------|
+| 도구 10개 중 LLM이 골라야 한다 | LangGraph |
+| 모호한 질문에 2개 동시 호출 필요 | LangGraph |
+| 비개발자가 워크플로우 수정해야 한다 | Dify |
+| 빠르게 프로토타입 만들어 데모 | Dify |
+| 단순한 파이프라인 (입력→처리→출력) | Dify |
+
+### Q3. Function Calling이 정확히 뭔가요?
 
 일반적인 LLM 호출:
 ```
@@ -616,8 +815,9 @@ Function Calling이 있는 LLM 호출:
 ```
 
 **핵심:** LLM이 "이 함수를 이 인자로 호출해줘"라고 **구조화된 응답**을 하는 것.
+실제 함수 실행은 LLM이 하는 게 아니라 **프로그램(LangGraph)이** 합니다. LLM은 "뭘 호출할지"만 결정합니다.
 
-### Q3. StateGraph의 `add_messages` 어노테이션은 왜 필요한가요?
+### Q4. StateGraph의 `add_messages` 어노테이션은 왜 필요한가요?
 
 일반 TypedDict에서:
 ```python
@@ -635,7 +835,7 @@ Function Calling이 있는 LLM 호출:
 
 이게 없으면 InfoAgent → ToolNode → InfoAgent 재진입 시 이전 메시지가 사라집니다.
 
-### Q4. 토큰 트리밍은 왜 필요한가요?
+### Q5. 토큰 트리밍은 왜 필요한가요?
 
 LLM에는 **컨텍스트 윈도우** 한계가 있습니다 (Gemini 2.0 Flash: ~100만 토큰).
 도구 결과가 길면 (예: 장비 30대의 상세 정보) 빠르게 한계에 도달합니다.
@@ -653,7 +853,7 @@ MAX_MESSAGES = 12
 MAX_TOTAL_CHARS = 30000
 ```
 
-### Q5. Open WebUI는 왜 비교 대상에서 빠졌나요?
+### Q6. Open WebUI는 왜 비교 대상에서 빠졌나요?
 
 Open WebUI는 **채팅 프론트엔드**이고, LangGraph/Dify는 **워크플로우 오케스트레이션 도구**입니다.
 
