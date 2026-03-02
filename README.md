@@ -85,6 +85,35 @@
 
 ---
 
+## 그래서 뭘 써야 하나? → Open WebUI + LangGraph
+
+이 프로젝트의 비교 결과, **도구 연동이 필요한 AI 챗봇**에는 **Open WebUI + LangGraph** 조합을 선택했습니다.
+
+```mermaid
+graph LR
+    User([사용자]) --> OW["Open WebUI<br>(채팅 UI)"]
+    OW -->|OpenAI 호환 API| LG["LangGraph + LangServe<br>(에이전트 로직)"]
+    LG -->|"@tool"| DB[(SQLite / 사내 DB)]
+    LG -->|LLM 호출| LLM["Gemini → watsonx QWEN"]
+
+    style OW fill:#ecfdf5,stroke:#10b981
+    style LG fill:#e8f5e9,stroke:#1C3C3C
+    style LLM fill:#fff3e0,stroke:#f57c00
+```
+
+**왜?**
+
+| 결정 근거 | 설명 |
+|-----------|------|
+| **도구 자율 선택** | LLM이 10개 도구 중 상황에 맞게 골라 호출. Dify는 워크플로우 고정 분기라 이게 안 됨 |
+| **동시 호출** | "설비 Lot 알려줘" → 물리적 위치 + 스케줄 2개 동시 호출. Dify에서는 불가 |
+| **LLM 교체 용이** | Gemini → watsonx QWEN 전환 시 `config.py` 1줄 변경 (`langchain-ibm`) |
+| **이미 구현됨** | 검증된 에이전트 코드 600줄 재활용 |
+
+> 전체 결정 과정: **[docs/architecture-decision.md](docs/architecture-decision.md)** (ADR)
+
+---
+
 ## 아키텍처 다이어그램
 
 ### 전체 구조
@@ -342,7 +371,8 @@ Tool Server 기동 후 **Swagger UI**: http://localhost:8400/docs
 
 | 문서 | 내용 |
 |------|------|
-| [docs/comparison.md](docs/comparison.md) | 개발경험, 유연성, 배포, 유지보수, 비용 — 7개 관점 비교 |
+| [docs/architecture-decision.md](docs/architecture-decision.md) | **아키텍처 결정 기록 (ADR)** — 왜 Open WebUI + LangGraph인가 |
+| [docs/comparison.md](docs/comparison.md) | LangGraph vs Dify 상세 비교 (7개 관점) |
 | [docs/examples.md](docs/examples.md) | 동일 질문 3개에 대한 각 구현별 응답 비교 |
 | [dify/README.md](dify/README.md) | Dify 설정 가이드 |
 | [open-webui/README.md](open-webui/README.md) | Open WebUI 설정 가이드 |
