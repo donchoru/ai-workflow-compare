@@ -1,13 +1,12 @@
 # AI Workflow Compare
 
-> **동일한 유스케이스를 LangGraph / Dify / Open WebUI 3가지로 구현하여 비교**
+> **코드로 짜는 LangGraph vs 드래그&드롭 Dify — 같은 AI 에이전트를 얼마나 다르게 만드는가**
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python&logoColor=white)
 ![Gemini](https://img.shields.io/badge/LLM-Gemini_2.0_Flash-4285F4?logo=google&logoColor=white)
 ![SQLite](https://img.shields.io/badge/DB-SQLite-003B57?logo=sqlite&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-코드_퍼스트-1C3C3C?logo=langchain&logoColor=white)
 ![Dify](https://img.shields.io/badge/Dify-비주얼_워크플로우-6366F1)
-![OpenWebUI](https://img.shields.io/badge/Open_WebUI-채팅_Pipeline-10B981)
 
 ---
 
@@ -26,58 +25,59 @@
 
 <table>
 <tr>
-<th width="25%">항목</th>
-<th width="25%">LangGraph</th>
-<th width="25%">Dify</th>
-<th width="25%">Open WebUI</th>
+<th width="30%">항목</th>
+<th width="35%">LangGraph (코드 퍼스트)</th>
+<th width="35%">Dify (비주얼 캔버스)</th>
 </tr>
 <tr>
-<td><b>접근 방식</b></td>
-<td>Python 코드</td>
-<td>비주얼 캔버스 (노코드)</td>
-<td>채팅 UI + Pipeline</td>
+<td><b>한 줄 요약</b></td>
+<td>Python으로 에이전트 로직을 직접 코딩</td>
+<td>캔버스에서 노드를 연결하여 워크플로우 구성</td>
 </tr>
 <tr>
 <td><b>코드량</b></td>
-<td>~600줄</td>
-<td>~0줄 (YAML 설정)</td>
-<td>~150줄</td>
+<td>~600줄 Python</td>
+<td>~0줄 (YAML 설정만)</td>
+</tr>
+<tr>
+<td><b>의도분류</b></td>
+<td>IntentAgent — LLM이 JSON으로 구조화</td>
+<td>Question Classifier 노드 (내장)</td>
 </tr>
 <tr>
 <td><b>도구 선택</b></td>
-<td>LLM이 10개 중 자율 선택</td>
-<td>워크플로우 고정 라우팅</td>
-<td>의도→엔드포인트 매핑</td>
+<td>LLM이 10개 도구 중 <b>자율 선택</b><br>모호하면 2개 동시 호출</td>
+<td>워크플로우에서 <b>고정 분기</b><br>의도 1개 → API 1개</td>
 </tr>
 <tr>
-<td><b>유연성</b></td>
-<td>&#11088;&#11088;&#11088; 최고</td>
-<td>&#11088;&#11088; 중간</td>
-<td>&#11088;&#11088; 중간</td>
+<td><b>상태 관리</b></td>
+<td>TypedDict StateGraph<br>(대화 이력, 의도, 메시지 직접 관리)</td>
+<td>자동 (플랫폼 내장)</td>
 </tr>
 <tr>
-<td><b>진입장벽</b></td>
-<td>높음 (Python 필수)</td>
-<td>낮음 (드래그&드롭)</td>
-<td>중간</td>
+<td><b>디버깅</b></td>
+<td>FM I/O 트레이스 파일<br>(입출력 전부 기록)</td>
+<td>내장 실행 로그 + 노드별 결과</td>
 </tr>
 <tr>
-<td><b>추천 대상</b></td>
-<td>개발자, 복잡한 에이전트</td>
-<td>비개발자, 빠른 프로토타입</td>
-<td>내부 도구, ChatGPT 대체</td>
+<td><b>배포</b></td>
+<td>Python 스크립트 / LangServe</td>
+<td>워크플로우 저장 → API 즉시 노출</td>
 </tr>
 <tr>
 <td><b>장점</b></td>
-<td>완전 제어, 테스트 용이,<br>동시 도구 호출, 멀티 에이전트</td>
-<td>즉시 배포, 내장 모니터링,<br>프롬프트 UI, 노코드</td>
-<td>즉시 사용 가능한 UI,<br>Docker 한 줄, 간결한 코드</td>
+<td>완전한 코드 제어<br>동시 도구 호출 (모호성 해소)<br>테스트 + Git 자연스러움<br>멀티 에이전트 확장 가능</td>
+<td>코드 없이 구성<br>즉시 배포 + API 자동 생성<br>내장 모니터링/비용 추적<br>프롬프트 실시간 수정</td>
 </tr>
 <tr>
 <td><b>단점</b></td>
-<td>보일러플레이트 많음,<br>LangChain 학습 필요</td>
-<td>복잡한 로직 제한,<br>플랫폼 종속</td>
-<td>에이전트 패턴 미지원,<br>디버깅 제한적</td>
+<td>보일러플레이트 많음<br>LangChain 생태계 학습 필요<br>State 디버깅 복잡</td>
+<td>복잡한 로직 표현 한계<br>동적 도구 선택 불가<br>플랫폼 종속 (DSL)</td>
+</tr>
+<tr>
+<td><b>추천 시나리오</b></td>
+<td>복잡한 에이전트, 프로덕션,<br>세밀한 제어가 필요한 경우</td>
+<td>빠른 프로토타이핑,<br>비개발자 팀, 단순 파이프라인</td>
 </tr>
 </table>
 
@@ -97,26 +97,20 @@ graph TB
         DB <--> TS
     end
 
-    subgraph impl1["langgraph/ — 코드 퍼스트"]
-        LG_SQL["직접 SQL 접근"]
+    subgraph impl1["langgraph/ — 코드 퍼스트 (~600줄)"]
+        LG_SQL["직접 SQL 접근<br>@tool + Function Calling"]
     end
 
-    subgraph impl2["dify/ — 비주얼 캔버스"]
-        DIFY_HTTP["HTTP Request 노드"]
-    end
-
-    subgraph impl3["open-webui/ — 채팅 Pipeline"]
-        OW_HTTP["requests.get()"]
+    subgraph impl2["dify/ — 비주얼 캔버스 (~0줄)"]
+        DIFY_HTTP["HTTP Request 노드<br>워크플로우 고정 분기"]
     end
 
     LG_SQL --> DB
     DIFY_HTTP --> TS
-    OW_HTTP --> TS
 
     style shared fill:#f0f4ff,stroke:#4285f4
     style impl1 fill:#e8f5e9,stroke:#1C3C3C
     style impl2 fill:#ede9fe,stroke:#6366f1
-    style impl3 fill:#ecfdf5,stroke:#10b981
 ```
 
 ### LangGraph — 멀티 에이전트 플로우
@@ -168,25 +162,6 @@ graph LR
 ```
 
 **핵심:** 의도별 고정 분기. 코드 없이 캔버스에서 구성.
-
-### Open WebUI — Pipeline
-
-```mermaid
-graph LR
-    User([채팅 입력]) --> Pipe["pipe()"]
-
-    subgraph Pipeline["equipment_agent.py (~150줄)"]
-        Pipe --> C["1. _classify_intent()<br>Gemini 직접 호출"]
-        C --> T["2. _call_tool()<br>HTTP GET → tool_server"]
-        T --> R["3. _generate_response()<br>Gemini 직접 호출"]
-    end
-
-    R --> Output([채팅 응답])
-
-    style Pipeline fill:#ecfdf5,stroke:#10b981
-```
-
-**핵심:** 3단계 파이프라인. 간결하지만 도구 선택이 코드에 고정.
 
 ---
 
@@ -299,7 +274,7 @@ ai-workflow-compare/
 │   ├── workflows/equipment-agent.yml   # Dify DSL 워크플로우
 │   └── tools/openapi.yaml              # OpenAPI 3.0 스펙
 │
-├── open-webui/                  # 구현 3: Open WebUI (~150줄)
+├── open-webui/                  # 보너스: Open WebUI 채팅 UI
 │   ├── pipelines/equipment_agent.py    # Pipeline 클래스
 │   └── docker-compose.yml
 │
@@ -371,3 +346,38 @@ Tool Server 기동 후 **Swagger UI**: http://localhost:8400/docs
 | [docs/examples.md](docs/examples.md) | 동일 질문 3개에 대한 각 구현별 응답 비교 |
 | [dify/README.md](dify/README.md) | Dify 설정 가이드 |
 | [open-webui/README.md](open-webui/README.md) | Open WebUI 설정 가이드 |
+
+---
+
+## 보너스: Open WebUI Pipeline
+
+> Open WebUI는 LangGraph/Dify와 **같은 레벨의 비교 대상이 아닙니다.**
+> LangGraph와 Dify는 **AI 워크플로우 오케스트레이션 도구**이고,
+> Open WebUI는 **채팅 프론트엔드**입니다.
+>
+> 여기서는 "같은 유스케이스를 채팅 UI에 연결하면 어떤 모습인가"를 보여주기 위해 보너스로 포함했습니다.
+
+```mermaid
+graph LR
+    User([채팅 입력]) --> Pipe["pipe()"]
+
+    subgraph Pipeline["equipment_agent.py (~150줄)"]
+        Pipe --> C["1. _classify_intent()<br>Gemini 직접 호출"]
+        C --> T["2. _call_tool()<br>HTTP GET → tool_server"]
+        T --> R["3. _generate_response()<br>Gemini 직접 호출"]
+    end
+
+    R --> Output([채팅 응답])
+
+    style Pipeline fill:#ecfdf5,stroke:#10b981
+```
+
+| 비교 | LangGraph / Dify | Open WebUI |
+|------|-----------------|------------|
+| **본질** | 워크플로우 오케스트레이션 | 채팅 프론트엔드 |
+| **초점** | 에이전트 로직 설계 | 사용자 인터페이스 |
+| **용도** | "AI가 어떻게 생각하고 행동하는가" | "결과를 어떻게 보여주는가" |
+
+실무에서는 LangGraph로 에이전트를 만들고, Open WebUI로 UI를 씌우는 **조합**이 일반적입니다.
+
+설정 가이드: [open-webui/README.md](open-webui/README.md)
