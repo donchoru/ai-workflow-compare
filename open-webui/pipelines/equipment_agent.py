@@ -17,7 +17,7 @@ class Pipeline:
         """파이프라인 설정값 — Open WebUI 관리 화면에서 변경 가능."""
         gemini_api_key: str = ""
         tool_server_url: str = "http://localhost:8400"
-        model_name: str = "gemini-2.0-flash"
+        model_name: str = "gemini-2.5-flash"
 
     def __init__(self):
         self.name = "물류 장비 부하율 관리"

@@ -9,4 +9,4 @@ DB_PATH = BASE_DIR.parent / "logistics.db"
 TRACES_DIR = BASE_DIR / "traces"
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
